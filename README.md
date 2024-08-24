@@ -1,4 +1,4 @@
-# NodeClimb-DockerLab
+# NodeClimb
 DockerLab - Machine
 
 ![Captura de pantalla maquina NodeClimb - Dockerlab](images/Image_step_home.png)
